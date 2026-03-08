@@ -1,24 +1,74 @@
-export default function InterviewRoom({ params }: { params: { id: string } }) {
+'use client';
+
+import React from 'react';
+import Editor from '@monaco-editor/react';
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup
+} from "@/components/ui/resizable";
+
+export default function InterviewPage({ params }: { params: { id: string } }) {
+  // In a real SDE workflow, we would use the 'id' to fetch the specific problem from the DB
+  const problemTitle = "Two Sum (O(n) space constraint)";
+
   return (
-    <main className="flex h-screen flex-col bg-zinc-950 p-6 text-zinc-50">
-      <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
-        <h1 className="text-2xl font-bold">Active Interview Session</h1>
-        <span className="rounded bg-blue-900 px-3 py-1 text-sm font-semibold text-blue-300">
-          Session ID: {params.id}
-        </span>
-      </div>
-      
-      <div className="mt-6 flex flex-1 gap-6">
-        {/* Left side: Code Editor Placeholder */}
-        <div className="flex-1 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-          <p className="text-zinc-400">Code Editor goes here...</p>
+    <main className="h-screen w-full bg-zinc-950 flex flex-col">
+      {/* Top Header Bar */}
+      <header className="h-14 border-b border-zinc-800 flex items-center px-6 justify-between bg-zinc-900">
+        <h2 className="font-semibold text-zinc-200">{problemTitle}</h2>
+        <div className="flex gap-4">
+          <button className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-md text-sm font-medium transition-colors">
+            Submit Code
+          </button>
         </div>
-        
-        {/* Right side: AI Chat Placeholder */}
-        <div className="w-1/3 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-          <p className="text-zinc-400">AI Interviewer feedback goes here...</p>
-        </div>
-      </div>
+      </header>
+
+      {/* Main Split-Screen Workspace */}
+      <ResizablePanelGroup orientation="horizontal" className="flex-1">
+
+        {/* Left Side: AI Chat & Problem Statement */}
+        <ResizablePanel defaultSize={40} minSize={30}>
+          <div className="h-full flex flex-col p-6 bg-zinc-950 overflow-y-auto">
+            <div className="prose prose-invert max-w-none">
+              <h1 className="text-2xl font-bold text-blue-400">Problem Statement</h1>
+              <p className="text-zinc-400 mt-4 leading-relaxed">
+                Given an array of integers <code className="bg-zinc-800 px-1 rounded text-zinc-200">nums</code> and an integer <code className="bg-zinc-800 px-1 rounded text-zinc-200">target</code>,
+                return indices of the two numbers such that they add up to target.
+              </p>
+              <div className="mt-8 border-t border-zinc-800 pt-6">
+                <span className="text-xs font-bold uppercase tracking-widest text-zinc-500">Interview Chat</span>
+                <div className="mt-4 p-4 rounded-lg bg-zinc-900 border border-zinc-800 text-sm text-zinc-300">
+                  <span className="text-blue-400 font-bold">Bar-Raiser:</span> Welcome, Kartik. Can you walk me through your initial approach?
+                  I noticed you haven't considered the O(n) space constraint yet.
+                </div>
+              </div>
+            </div>
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle withHandle className="bg-zinc-800" />
+
+        {/* Right Side: Monaco Code Editor */}
+        <ResizablePanel defaultSize={60}>
+          <div className="h-full border-l border-zinc-800">
+            <Editor
+              height="100%"
+              defaultLanguage="cpp"
+              defaultValue="// Write your C++ solution here..."
+              theme="vs-dark"
+              options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                fontFamily: 'var(--font-jetbrains-mono)',
+                scrollBeyondLastLine: false,
+                padding: { top: 20 }
+              }}
+            />
+          </div>
+        </ResizablePanel>
+
+      </ResizablePanelGroup>
     </main>
   );
 }
