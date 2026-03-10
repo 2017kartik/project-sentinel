@@ -1,11 +1,19 @@
-import { GoogleGenAI } from '@google/genai';
-import { neon } from '@neondatabase/serverless';
+import { GoogleGenAI } from "@google/genai";
+import { neon } from "@neondatabase/serverless";
 
 const ai = new GoogleGenAI({});
 
 export async function POST(req: Request) {
-  const { userMessage, currentCode, language, sessionId } = await req.json();
-  
+  const {
+    userMessage,
+    currentCode,
+    language,
+    sessionId,
+    problemTitle,
+    optimalTime,
+    optimalSpace,
+  } = await req.json();
+
   // 1. Connect to Neon Database
   const sql = neon(process.env.DATABASE_URL!);
 
@@ -17,18 +25,21 @@ export async function POST(req: Request) {
     `;
 
     const prompt = `
-    Candidate's Message: "${userMessage}"
-    
-    Candidate's Current Code (${language}):
-    \`\`\`${language}
-    ${currentCode}
-    \`\`\`
-    
-    Respond to the candidate in character as 'The Bar-Raiser'.
-    `;
+  You are conducting a mock technical interview for the problem: "${problemTitle}".
+  The candidate must achieve an optimal time complexity of ${optimalTime} and space complexity of ${optimalSpace}.
+  
+  Candidate's Message: "${userMessage}"
+  
+  Candidate's Current Code (${language}):
+  \`\`\`${language}
+  ${currentCode}
+  \`\`\`
+  
+  Respond to the candidate in character as 'The Bar-Raiser'.
+  `;
 
     const responseStream = await ai.models.generateContentStream({
-      model: 'gemini-3-flash-preview',
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         systemInstruction: `You are an elite, relentless Senior Software Engineer conducting a mock technical interview. Your persona is 'The Bar-Raiser'. 
@@ -39,15 +50,15 @@ export async function POST(req: Request) {
         - Always use Markdown. 
         - Use bullet points when listing multiple issues.
         - Add double line breaks between paragraphs for readability.
-        - Use inline code formatting backticks for variable names.`
-      }
+        - Use inline code formatting backticks for variable names.`,
+      },
     });
 
     // 3. Convert stream and save the final AI response to the database
     const stream = new ReadableStream({
       async start(controller) {
         let fullAiResponse = "";
-        
+
         try {
           for await (const chunk of responseStream) {
             if (chunk.text) {
@@ -55,25 +66,26 @@ export async function POST(req: Request) {
               controller.enqueue(new TextEncoder().encode(chunk.text)); // Send chunk to browser
             }
           }
-          
+
           // 4. The stream is finished! Save the complete AI response to the database
           await sql`
             INSERT INTO messages (session_id, role, content) 
             VALUES (${sessionId}, 'ai', ${fullAiResponse})
           `;
-          
         } catch (streamError) {
           console.error("Stream parsing error:", streamError);
         } finally {
           controller.close();
         }
-      }
+      },
     });
 
     return new Response(stream);
-
   } catch (error: any) {
     console.error("Streaming Error RAW:", error);
-    return new Response(`CRITICAL ERROR: ${error.message || JSON.stringify(error)}`, { status: 500 });
+    return new Response(
+      `CRITICAL ERROR: ${error.message || JSON.stringify(error)}`,
+      { status: 500 }
+    );
   }
 }
