@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, use } from 'react';
+import { useState, useEffect, use } from 'react';
+import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import {
   ResizableHandle,
@@ -11,30 +13,39 @@ import ReactMarkdown from 'react-markdown';
 
 export default function InterviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  
   // 1. Dynamic State
   const [code, setCode] = useState<string>('// Loading editor...');
   const [problem, setProblem] = useState<any>(null);
-
+  const [fetchError, setFetchError] = useState<string | null>(null); // Graceful error state
   const [activeTab, setActiveTab] = useState<'description' | 'chat'>('description');
-
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [messages, setMessages] = useState([
     { role: 'ai', content: "Welcome, Kartik. Can you walk me through your initial approach?" }
   ]);
+  
+  // --- FIX: Use the UUID that already exists in your Neon 'sessions' table ---
+  // This bypasses the foreign key constraint error until we build a session-creator API.
+  const [sessionId] = useState('22222222-2222-2222-2222-222222222222');
 
   // 2. Fetch Problem Data on Load
   useEffect(() => {
     const fetchProblem = async () => {
       try {
+        setFetchError(null);
         const res = await fetch(`/api/problems/${id}`);
-        if (!res.ok) throw new Error("Problem not found");
+        
+        if (!res.ok) {
+          throw new Error("Database timeout or problem not found. Please wake up the database.");
+        }
+        
         const data = await res.json();
-
         setProblem(data);
         setCode(data.boilerplate_cpp);
-      } catch (err) {
-        console.error(err);
+      } catch (err: any) {
+        console.error("Fetch Error:", err);
+        setFetchError(err.message || "Failed to load problem.");
       }
     };
     fetchProblem();
@@ -46,6 +57,8 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
   const [isLocked, setIsLocked] = useState(false);
 
   useEffect(() => {
+    if (!problem) return; // Do not start timer until problem is loaded
+
     if (timeLeft <= 0) {
       setIsLocked(true);
       return;
@@ -57,7 +70,7 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, isLocked]);
+  }, [timeLeft, isLocked, problem]); 
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -84,8 +97,7 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
           userMessage: input,
           currentCode: code,
           language: 'cpp',
-          sessionId: '22222222-2222-2222-2222-222222222222',
-          // --- NEW: Pass dynamic context to the AI ---
+          sessionId: sessionId, 
           problemTitle: problem?.title,
           optimalTime: problem?.optimal_time,
           optimalSpace: problem?.optimal_space
@@ -119,6 +131,8 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
 
   // 5. Handle Final Submission
   const handleProposeSolution = async () => {
+    setActiveTab('chat'); // Auto-switch to AI tab
+
     const submitPrompt = "I am proposing this as my final, production-ready solution. Please evaluate my time and space complexity. If it is fully optimal and handles all edge cases, give me your final feedback and end your response with EXACTLY the string: [RESULT: PASS]. If it is not optimal, end with EXACTLY: [RESULT: FAIL].";
 
     const newMessages = [...messages, { role: 'user', content: "I am ready to submit my final solution for grading." }];
@@ -134,8 +148,7 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
           userMessage: submitPrompt,
           currentCode: code,
           language: 'cpp',
-          sessionId: '22222222-2222-2222-2222-222222222222',
-          // --- NEW: Pass dynamic context to the AI ---
+          sessionId: sessionId, 
           problemTitle: problem?.title,
           optimalTime: problem?.optimal_time,
           optimalSpace: problem?.optimal_space
@@ -161,16 +174,18 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
           return updated;
         });
 
+        // Background Check for Status
         if (aiResponse.includes('[RESULT: PASS]') || aiResponse.includes('[RESULT: FAIL]')) {
           setIsLocked(true);
 
           const finalResult = aiResponse.includes('PASS') ? 'PASS' : 'FAIL';
 
+          // --- We send problemSlug: id instead of a fake sessionId to update the dashboard! ---
           fetch('/api/session/complete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              sessionId: '22222222-2222-2222-2222-222222222222',
+              problemSlug: id, 
               finalResult: finalResult
             })
           }).catch(err => console.error("Failed to mark session complete:", err));
@@ -186,8 +201,16 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
   return (
     <main className="h-screen w-full bg-zinc-950 flex flex-col">
       <header className="h-14 border-b border-zinc-800 flex items-center px-6 justify-between bg-zinc-900">
-        {/* --- NEW: Dynamic Title --- */}
-        <h2 className="font-semibold text-zinc-200">{problem ? problem.title : 'Loading...'}</h2>
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Dashboard
+        </Link>
+        <h2 className="font-semibold text-zinc-200">
+          {fetchError ? 'Connection Error' : problem ? problem.title : 'Loading...'}
+        </h2>
 
         <div className="flex items-center gap-6">
           <div className={`font-mono text-lg font-bold ${timeLeft < 300 ? 'text-red-500 animate-pulse' : 'text-zinc-300'}`}>
@@ -196,10 +219,10 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
 
           <button
             onClick={handleProposeSolution}
-            disabled={isLocked || isLoading || !problem}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${isLocked
-                ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
-                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+            disabled={isLocked || isLoading || !problem || !!fetchError}
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${isLocked || fetchError
+              ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
+              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
               }`}
           >
             {isLocked ? "Interview Concluded" : "Propose Solution"}
@@ -209,23 +232,23 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
 
       <ResizablePanelGroup orientation="horizontal" className="flex-1">
         <ResizablePanel defaultSize={40} minSize={30}>
-          <div className="h-full flex flex-col p-6 bg-zinc-950">
+          <div className="h-full flex flex-col bg-zinc-950">
             {/* --- TAB HEADER --- */}
-            <div className="flex bg-zinc-900 border-b border-zinc-800 px-4 pt-2">
+            <div className="flex bg-zinc-900 border-b border-zinc-800 px-6 pt-2">
               <button
                 onClick={() => setActiveTab('description')}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'description'
-                    ? 'border-blue-500 text-blue-400'
-                    : 'border-transparent text-zinc-400 hover:text-zinc-300 hover:border-zinc-700'
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'description'
+                  ? 'border-blue-500 text-blue-400'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-300 hover:border-zinc-700'
                   }`}
               >
                 Description
               </button>
               <button
                 onClick={() => setActiveTab('chat')}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'chat'
-                    ? 'border-emerald-500 text-emerald-400'
-                    : 'border-transparent text-zinc-400 hover:text-zinc-300 hover:border-zinc-700'
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'chat'
+                  ? 'border-emerald-500 text-emerald-400'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-300 hover:border-zinc-700'
                   }`}
               >
                 AI Interviewer
@@ -243,7 +266,6 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
                   [&::-webkit-scrollbar-thumb]:bg-zinc-700 
                   [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-zinc-600"
                 >
-                  {/* Inner container with pr-6 creates a safe zone away from the scrollbar */}
                   <div className="pr-6 prose prose-invert max-w-none wrap-break-word
                     prose-p:leading-relaxed prose-pre:bg-[#1e1e1e] prose-pre:p-4 
                     prose-pre:rounded-lg prose-pre:max-w-full prose-pre:overflow-x-auto 
@@ -251,15 +273,27 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
                     prose-code:py-0.5 prose-code:rounded-md prose-code:font-mono 
                     prose-code:text-[13px] prose-code:before:content-none prose-code:after:content-none 
                     prose-ul:list-disc prose-ul:pl-5 marker:text-zinc-500">
-                    
-                    {/* Add a specific margin to the title to match spacing */}
-                    <h1 className="text-2xl font-bold text-zinc-100 mb-6">
-                      {problem ? problem.title : 'Loading...'}
-                    </h1>
-                    
-                    <ReactMarkdown>
-                      {problem ? problem.description : 'Loading problem description...'}
-                    </ReactMarkdown>
+
+                    {fetchError ? (
+                      <div className="flex flex-col items-center justify-center p-8 mt-10 border border-red-900/50 bg-red-950/20 rounded-xl">
+                        <p className="text-red-400 font-medium mb-4">{fetchError}</p>
+                        <button 
+                          onClick={() => window.location.reload()} 
+                          className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-md transition-colors"
+                        >
+                          Refresh & Retry
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <h1 className="text-2xl font-bold text-zinc-100 mb-6">
+                          {problem ? problem.title : 'Loading...'}
+                        </h1>
+                        <ReactMarkdown>
+                          {problem ? problem.description : 'Loading problem description...'}
+                        </ReactMarkdown>
+                      </>
+                    )}
 
                   </div>
                 </div>
@@ -268,7 +302,11 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
               {/* TAB 2: AI CHAT */}
               {activeTab === 'chat' && (
                 <div className="flex-1 flex flex-col p-6 overflow-hidden">
-                  <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                  <div className="flex-1 overflow-y-auto space-y-4 pr-2
+                    [&::-webkit-scrollbar]:w-2 
+                    [&::-webkit-scrollbar-track]:bg-transparent 
+                    [&::-webkit-scrollbar-thumb]:bg-zinc-700 
+                    [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-zinc-600">
                     <span className="text-xs font-bold uppercase tracking-widest text-zinc-500 mb-4 block">
                       Live Interview
                     </span>
