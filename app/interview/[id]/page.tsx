@@ -244,7 +244,7 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
                   [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-zinc-600"
                 >
                   {/* Inner container with pr-6 creates a safe zone away from the scrollbar */}
-                  <div className="pr-6 prose prose-invert max-w-none break-words 
+                  <div className="pr-6 prose prose-invert max-w-none wrap-break-word
                     prose-p:leading-relaxed prose-pre:bg-[#1e1e1e] prose-pre:p-4 
                     prose-pre:rounded-lg prose-pre:max-w-full prose-pre:overflow-x-auto 
                     prose-code:bg-zinc-800 prose-code:text-zinc-200 prose-code:px-1.5 

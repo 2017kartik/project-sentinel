@@ -1,0 +1,26 @@
+[
+  {
+    "slug": "valid-parentheses",
+    "title": "Valid Parentheses",
+    "description": "Given a string s containing just the characters '(', ')', '{', '}', '[' and ']', determine if the input string is valid.\n\nAn input string is valid if:\n* Open brackets must be closed by the same type of brackets.\n* Open brackets must be closed in the correct order.\n* Every close bracket has a corresponding open bracket of the same type.\n\nExample 1:\n    Input: s = \"()\"\n    Output: true\n\nExample 2:\n    Input: s = \"()[]{}\"\n    Output: true\n\nExample 3:\n    Input: s = \"(]\"\n    Output: false\n\n### Constraints:\n* 1 <= s.length <= 10^4\n* s consists of parentheses only.",
+    "optimal_time": "O(n)",
+    "optimal_space": "O(n)",
+    "boilerplate_cpp": "#include <string>\n#include <stack>\n\nusing namespace std;\n\nclass Solution {\npublic:\n    bool isValid(string s) {\n        // Write your optimized solution here...\n        \n    }\n};"
+  },
+  {
+    "slug": "best-time-to-buy-and-sell-stock",
+    "title": "Best Time to Buy and Sell Stock",
+    "description": "You are given an array prices where prices[i] is the price of a given stock on the ith day.\n\nYou want to maximize your profit by choosing a single day to buy one stock and choosing a different day in the future to sell that stock.\n\nReturn the maximum profit you can achieve from this transaction. If you cannot achieve any profit, return 0.\n\nExample 1:\n    Input: prices = [7,1,5,3,6,4]\n    Output: 5\n    Explanation: Buy on day 2 and sell on day 5.\n\n### Constraints:\n* 1 <= prices.length <= 10^5\n* 0 <= prices[i] <= 10^4",
+    "optimal_time": "O(n)",
+    "optimal_space": "O(1)",
+    "boilerplate_cpp": "#include <vector>\n#include <algorithm>\n\nusing namespace std;\n\nclass Solution {\npublic:\n    int maxProfit(vector<int>& prices) {\n        // Write your optimized solution here...\n        \n    }\n};"
+  },
+  {
+    "slug": "contains-duplicate",
+    "title": "Contains Duplicate",
+    "description": "Given an integer array nums, return true if any value appears at least twice in the array, and return false if every element is distinct.\n\nExample 1:\n    Input: nums = [1,2,3,1]\n    Output: true\n\nExample 2:\n    Input: nums = [1,2,3,4]\n    Output: false\n\n### Constraints:\n* 1 <= nums.length <= 10^5\n* -10^9 <= nums[i] <= 10^9",
+    "optimal_time": "O(n)",
+    "optimal_space": "O(n)",
+    "boilerplate_cpp": "#include <vector>\n#include <unordered_set>\n\nusing namespace std;\n\nclass Solution {\npublic:\n    bool containsDuplicate(vector<int>& nums) {\n        // Write your optimized solution here...\n        \n    }\n};"
+  }
+]
