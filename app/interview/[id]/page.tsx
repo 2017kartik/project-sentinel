@@ -17,28 +17,40 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
   // 1. Dynamic State
   const [code, setCode] = useState<string>('// Loading editor...');
   const [problem, setProblem] = useState<any>(null);
-  const [fetchError, setFetchError] = useState<string | null>(null); // Graceful error state
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'description' | 'chat'>('description');
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [messages, setMessages] = useState([
-    { role: 'ai', content: "Welcome, Kartik. Can you walk me through your initial approach?" }
-  ]);
+  const [sessionId] = useState(() => crypto.randomUUID());
   
-  // --- FIX: Use the UUID that already exists in your Neon 'sessions' table ---
-  // This bypasses the foreign key constraint error until we build a session-creator API.
-  const [sessionId] = useState('22222222-2222-2222-2222-222222222222');
+  const [difficultyLevel, setDifficultyLevel] = useState(3);
+  const [personaName, setPersonaName] = useState('The Bar-Raiser');
+  const [messages, setMessages] = useState<{role: string, content: string}[]>([]);
 
-  // 2. Fetch Problem Data on Load
+  // 2. Fetch Problem Data & Read Difficulty on Mount
   useEffect(() => {
+    const stored = localStorage.getItem('sentinel_difficulty');
+    const level = stored ? parseInt(stored) : 3;
+    setDifficultyLevel(level);
+
+    let initialMsg = "I am ready. Walk me through your optimal approach.";
+    if (level === 1) {
+      setPersonaName('The Guide');
+      initialMsg = "Welcome! Take a deep breath. Let's work through this problem together. What are your initial thoughts?";
+    } else if (level === 2) {
+      setPersonaName('The Standard Interviewer');
+      initialMsg = "Hello. Please read the problem description and explain your initial approach before writing code.";
+    } else {
+      setPersonaName('The Bar-Raiser');
+    }
+    
+    setMessages([{ role: 'ai', content: initialMsg }]);
+
     const fetchProblem = async () => {
       try {
         setFetchError(null);
         const res = await fetch(`/api/problems/${id}`);
-        
-        if (!res.ok) {
-          throw new Error("Database timeout or problem not found. Please wake up the database.");
-        }
+        if (!res.ok) throw new Error("Database timeout or problem not found. Please wake up the database.");
         
         const data = await res.json();
         setProblem(data);
@@ -57,7 +69,7 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
   const [isLocked, setIsLocked] = useState(false);
 
   useEffect(() => {
-    if (!problem) return; // Do not start timer until problem is loaded
+    if (!problem) return; 
 
     if (timeLeft <= 0) {
       setIsLocked(true);
@@ -97,10 +109,12 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
           userMessage: input,
           currentCode: code,
           language: 'cpp',
-          sessionId: sessionId, 
+          sessionId: sessionId,
           problemTitle: problem?.title,
           optimalTime: problem?.optimal_time,
-          optimalSpace: problem?.optimal_space
+          optimalSpace: problem?.optimal_space,
+          difficultyLevel: difficultyLevel,
+          previousMessages: messages // <--- FIX 1: Send the chat history!
         })
       });
       if (!res.body) throw new Error("No stream returned");
@@ -131,7 +145,7 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
 
   // 5. Handle Final Submission
   const handleProposeSolution = async () => {
-    setActiveTab('chat'); // Auto-switch to AI tab
+    setActiveTab('chat'); 
 
     const submitPrompt = "I am proposing this as my final, production-ready solution. Please evaluate my time and space complexity. If it is fully optimal and handles all edge cases, give me your final feedback and end your response with EXACTLY the string: [RESULT: PASS]. If it is not optimal, end with EXACTLY: [RESULT: FAIL].";
 
@@ -148,10 +162,12 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
           userMessage: submitPrompt,
           currentCode: code,
           language: 'cpp',
-          sessionId: sessionId, 
+          sessionId: sessionId,
           problemTitle: problem?.title,
           optimalTime: problem?.optimal_time,
-          optimalSpace: problem?.optimal_space
+          optimalSpace: problem?.optimal_space,
+          difficultyLevel: difficultyLevel,
+          previousMessages: messages // <--- FIX 2: Send the chat history!
         })
       });
 
@@ -174,13 +190,11 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
           return updated;
         });
 
-        // Background Check for Status
         if (aiResponse.includes('[RESULT: PASS]') || aiResponse.includes('[RESULT: FAIL]')) {
           setIsLocked(true);
 
           const finalResult = aiResponse.includes('PASS') ? 'PASS' : 'FAIL';
 
-          // --- We send problemSlug: id instead of a fake sessionId to update the dashboard! ---
           fetch('/api/session/complete', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -314,7 +328,7 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
                     {messages.map((msg, idx) => (
                       <div key={idx} className={`p-4 rounded-lg text-sm ${msg.role === 'ai' ? 'bg-zinc-900 border border-zinc-800 text-zinc-300' : 'bg-blue-900/20 border border-blue-900/50 text-blue-100 ml-8'}`}>
                         <div className={`font-bold mb-2 ${msg.role === 'ai' ? 'text-blue-400' : 'text-emerald-400'}`}>
-                          {msg.role === 'ai' ? 'Bar-Raiser:' : 'You:'}
+                          {msg.role === 'ai' ? `${personaName}:` : 'You:'}
                         </div>
                         <div className="prose prose-invert prose-sm max-w-none prose-pre:bg-zinc-950 prose-pre:border prose-pre:border-zinc-800 whitespace-pre-wrap">
                           {msg.content === '' ? (

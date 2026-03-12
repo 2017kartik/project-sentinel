@@ -12,66 +12,106 @@ export async function POST(req: Request) {
     problemTitle,
     optimalTime,
     optimalSpace,
+    difficultyLevel,
+    previousMessages // --- NEW: We receive the chat history! ---
   } = await req.json();
 
-  // 1. Connect to Neon Database
   const sql = neon(process.env.DATABASE_URL!);
 
-  try {
-    // 2. Save the User's message to the database immediately
-    await sql`
-      INSERT INTO messages (session_id, role, content) 
-      VALUES (${sessionId}, 'user', ${userMessage})
-    `;
+  const withRetry = async (dbCall: () => Promise<any>, retries = 3) => {
+    for (let i = 0; i < retries; i++) {
+      try { return await dbCall(); } 
+      catch (err: any) {
+        if (i === retries - 1) throw err;
+        await new Promise((res) => setTimeout(res, 1500));
+      }
+    }
+  };
 
-    const prompt = `
-  You are conducting a mock technical interview for the problem: "${problemTitle}".
-  The candidate must achieve an optimal time complexity of ${optimalTime} and space complexity of ${optimalSpace}.
-  
-  Candidate's Message: "${userMessage}"
-  
-  Candidate's Current Code (${language}):
-  \`\`\`${language}
-  ${currentCode}
-  \`\`\`
-  
-  Respond to the candidate in character as 'The Bar-Raiser'.
-  `;
+  try {
+    let personaName = "The Bar-Raiser";
+    let personaInstruction = "You are an elite, relentless Senior Software Engineer conducting a mock technical interview. Your persona is 'The Bar-Raiser'. You are highly critical and focus intensely on Big-O time and space complexity. Expect production-ready code. Do NOT give away the exact answer. Ask probing questions, point out missing edge cases, and challenge logic.";
+
+    if (difficultyLevel === 1) {
+      personaName = "The Guide";
+      personaInstruction = "You are a friendly, encouraging Senior Engineer acting as 'The Guide'. Your goal is to help the candidate learn. Give gentle hints if they are stuck, praise good ideas, and collaboratively guide them toward the optimal time and space complexity. Do not just give them the answer, but lead them there with helpful clues.";
+    } else if (difficultyLevel === 2) {
+      personaName = "The Standard Interviewer";
+      personaInstruction = "You are a professional, neutral Software Engineer conducting a standard technical interview. Evaluate their code objectively. Ask clarifying questions, point out bugs, and request time/space complexity analysis. Maintain a polite but formal tone. Let them struggle a bit, but offer a hint if they are completely stuck for too long.";
+    }
+
+    const dummyUserId = '11111111-1111-1111-1111-111111111111'; 
+    
+    await withRetry(async () => {
+      await sql`
+        INSERT INTO sessions (id, user_id, problem_title, difficulty_mode, status) 
+        VALUES (${sessionId}, ${dummyUserId}, ${problemTitle}, ${personaName}, 'In Progress')
+        ON CONFLICT (id) DO NOTHING
+      `;
+    });
+
+    await withRetry(async () => {
+      await sql`
+        INSERT INTO messages (session_id, role, content) 
+        VALUES (${sessionId}, 'user', ${userMessage})
+      `;
+    });
+
+    // --- NEW: Format the chat history for Gemini ---
+    const formattedHistory = (previousMessages || [])
+      .filter((msg: any) => msg.content.trim() !== '') // Remove empty loading states
+      .map((msg: any) => ({
+        role: msg.role === 'ai' ? 'model' : 'user',
+        parts: [{ text: msg.content }]
+      }));
+
+    // --- NEW: Inject the current state as the final prompt ---
+    const latestPrompt = `
+[CURRENT INTERVIEW STATE]
+Problem: "${problemTitle}"
+Target Time Complexity: ${optimalTime}
+Target Space Complexity: ${optimalSpace}
+
+[CANDIDATE'S CURRENT CODE (${language})]
+\`\`\`${language}
+${currentCode}
+\`\`\`
+
+[CANDIDATE'S LATEST MESSAGE]
+"${userMessage}"
+
+Respond to the candidate's latest message in character as '${personaName}'. 
+Do NOT repeat questions you have already asked in the chat history.
+    `;
 
     const responseStream = await ai.models.generateContentStream({
       model: "gemini-2.5-flash",
-      contents: prompt,
+      // --- NEW: Send History + Latest Message ---
+      contents: [
+        ...formattedHistory,
+        { role: "user", parts: [{ text: latestPrompt }] }
+      ],
       config: {
-        systemInstruction: `You are an elite, relentless Senior Software Engineer conducting a mock technical interview. Your persona is 'The Bar-Raiser'. 
-        You are highly critical and focus intensely on Big-O time and space complexity. Expect production-ready code. 
-        Do NOT give away the exact answer. Ask probing questions, point out missing edge cases, and challenge logic. 
-        
-        FORMATTING RULES: 
-        - Always use Markdown. 
-        - Use bullet points when listing multiple issues.
-        - Add double line breaks between paragraphs for readability.
-        - Use inline code formatting backticks for variable names.`,
+        systemInstruction: `${personaInstruction}\n\nFORMATTING RULES:\n- Always use Markdown.\n- Use bullet points when listing multiple issues.\n- Add double line breaks between paragraphs for readability.\n- Use inline code formatting backticks for variable names.`,
       },
     });
 
-    // 3. Convert stream and save the final AI response to the database
     const stream = new ReadableStream({
       async start(controller) {
         let fullAiResponse = "";
-
         try {
           for await (const chunk of responseStream) {
             if (chunk.text) {
-              fullAiResponse += chunk.text; // Append chunks to the full string
-              controller.enqueue(new TextEncoder().encode(chunk.text)); // Send chunk to browser
+              fullAiResponse += chunk.text;
+              controller.enqueue(new TextEncoder().encode(chunk.text));
             }
           }
-
-          // 4. The stream is finished! Save the complete AI response to the database
-          await sql`
-            INSERT INTO messages (session_id, role, content) 
-            VALUES (${sessionId}, 'ai', ${fullAiResponse})
-          `;
+          await withRetry(async () => {
+            await sql`
+              INSERT INTO messages (session_id, role, content) 
+              VALUES (${sessionId}, 'ai', ${fullAiResponse})
+            `;
+          });
         } catch (streamError) {
           console.error("Stream parsing error:", streamError);
         } finally {
@@ -83,9 +123,9 @@ export async function POST(req: Request) {
     return new Response(stream);
   } catch (error: any) {
     console.error("Streaming Error RAW:", error);
-    return new Response(
-      `CRITICAL ERROR: ${error.message || JSON.stringify(error)}`,
-      { status: 500 }
-    );
+    if (error.message && error.message.includes('fetch failed')) {
+      return new Response("**[SYSTEM ERROR]** The database was asleep and took too long to wake up. I am awake now, please click 'Send' again to retry!", { status: 500 });
+    }
+    return new Response(`CRITICAL ERROR: ${error.message}`, { status: 500 });
   }
 }

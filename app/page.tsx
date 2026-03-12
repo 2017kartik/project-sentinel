@@ -6,13 +6,20 @@ import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 
 export default function Home() {
-  const [difficulty, setDifficulty] = useState([1]);
+  // Let's default to 3 (Bar-Raiser) for the true FAANG experience
+  const [difficulty, setDifficulty] = useState([3]);
 
-  // A helper function to translate the number into our persona
   const getPersona = (level: number) => {
     if (level === 1) return 'The Guide (Collaborative & Friendly)';
     if (level === 2) return 'The Standard Interviewer (Professional)';
     return 'The Bar-Raiser (Relentless & Tough)';
+  };
+
+  // Save the selected difficulty to localStorage before leaving the page
+  const saveDifficulty = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sentinel_difficulty', difficulty[0].toString());
+    }
   };
 
   return (
@@ -31,7 +38,7 @@ export default function Home() {
             </h2>
             
             <Slider 
-              defaultValue={[1]} 
+              defaultValue={[3]} 
               max={3} 
               min={1} 
               step={1}
@@ -40,7 +47,7 @@ export default function Home() {
             />
           </div>
 
-          <Button asChild className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-6 text-lg">
+          <Button asChild className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-6 text-lg" onClick={saveDifficulty}>
             <Link href="/dashboard">Enter Interview Sandbox</Link>
           </Button>
         </div>
