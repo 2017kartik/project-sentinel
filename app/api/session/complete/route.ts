@@ -2,25 +2,36 @@ import { neon } from '@neondatabase/serverless';
 
 export async function POST(req: Request) {
   try {
-    // We are now expecting problemSlug (e.g., "3sum"), not sessionId!
     const { problemSlug, finalResult } = await req.json();
     const sql = neon(process.env.DATABASE_URL!);
 
-    // 1. Automatically create the progress table if it doesn't exist
-    await sql`
-      CREATE TABLE IF NOT EXISTS user_progress (
-        slug VARCHAR(255) PRIMARY KEY,
-        status VARCHAR(50)
-      )
-    `;
+    // --- NEW: Database Retry Logic ---
+    const withRetry = async (dbCall: () => Promise<any>, retries = 3) => {
+      for (let i = 0; i < retries; i++) {
+        try { return await dbCall(); } 
+        catch (err: any) {
+          if (i === retries - 1) throw err;
+          console.log(`Database asleep. Retrying completion save...`);
+          await new Promise((res) => setTimeout(res, 1500));
+        }
+      }
+    };
 
-    // 2. Insert or Update the user's result for this specific problem
-    await sql`
-      INSERT INTO user_progress (slug, status) 
-      VALUES (${problemSlug}, ${finalResult})
-      ON CONFLICT (slug) DO UPDATE 
-      SET status = EXCLUDED.status
-    `;
+    await withRetry(async () => {
+      await sql`
+        CREATE TABLE IF NOT EXISTS user_progress (
+          slug VARCHAR(255) PRIMARY KEY,
+          status VARCHAR(50)
+        )
+      `;
+      
+      await sql`
+        INSERT INTO user_progress (slug, status) 
+        VALUES (${problemSlug}, ${finalResult})
+        ON CONFLICT (slug) DO UPDATE 
+        SET status = EXCLUDED.status
+      `;
+    });
 
     console.log(`✅ Database Updated: ${problemSlug} marked as ${finalResult}`);
 
