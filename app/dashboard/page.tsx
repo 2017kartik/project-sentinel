@@ -1,6 +1,8 @@
 import { neon } from '@neondatabase/serverless';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic'; 
+
 export default async function DashboardPage() {
   let problems: any[] = [];
   let isWakingUp = false;
@@ -8,15 +10,7 @@ export default async function DashboardPage() {
   try {
     const sql = neon(process.env.DATABASE_URL!);
     
-    // 1. Ensure the progress table exists before querying
-    await sql`
-      CREATE TABLE IF NOT EXISTS user_progress (
-        slug VARCHAR(255) PRIMARY KEY,
-        status VARCHAR(50)
-      )
-    `;
-    
-    // 2. Fetch problems AND the user's completion status using a LEFT JOIN!
+    // --- FIX: We removed the CREATE TABLE command! It only runs a pure, fast SELECT now. ---
     problems = await sql`
       SELECT 
         p.slug, 
@@ -67,7 +61,6 @@ export default async function DashboardPage() {
               {problems.map((problem) => (
                 <tr key={problem.slug} className="hover:bg-zinc-800/40 transition-colors group">
                   <td className="px-6 py-4">
-                    {/* --- DYNAMIC STATUS UI --- */}
                     {problem.status === 'PASS' ? (
                       <div className="flex items-center justify-center h-6 w-6 rounded-full bg-emerald-500/20 text-emerald-500" title="Passed">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
