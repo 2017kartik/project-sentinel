@@ -1,19 +1,19 @@
 import { neon } from '@neondatabase/serverless';
 import Link from 'next/link';
-import { auth } from '@clerk/nextjs/server'; // <-- NEW: Clerk Auth
-import { UserButton } from '@clerk/nextjs';  // <-- NEW: Clerk UI
+import { auth } from '@clerk/nextjs/server';
+import { UserButton } from '@clerk/nextjs';
+import DifficultySelector from '@/components/ui/DifficultySelector'; // <-- NEW: Import the slider
 
 export const dynamic = 'force-dynamic'; 
 
 export default async function DashboardPage() {
-  const { userId } = await auth(); // <-- Fetch logged-in user ID
+  const { userId } = await auth(); 
   let problems: any[] = [];
   let isWakingUp = false;
 
   try {
     const sql = neon(process.env.DATABASE_URL!);
     
-    // --- FIX: Query now joins user_progress ONLY for the logged-in user! ---
     problems = await sql`
       SELECT 
         p.slug, 
@@ -31,19 +31,24 @@ export default async function DashboardPage() {
   }
 
   return (
-    <main>
+    <main className="max-w-7xl mx-auto px-6 py-12">
+      {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-zinc-50">Problem Set</h1>
-          <p className="mt-2 text-zinc-400">Select a FAANG interview question to start your mock session.</p>
+          <p className="mt-2 text-zinc-400">Select your interviewer intensity, then choose a problem.</p>
         </div>
         
-        {/* --- NEW: Render Clerk User Profile Button --- */}
+        {/* Clerk User Profile Button */}
         <div className="bg-zinc-800 p-2 rounded-full border border-zinc-700 flex items-center justify-center">
            <UserButton />
         </div>
       </div>
 
+      {/* --- NEW: The Difficulty Selector --- */}
+      <DifficultySelector />
+
+      {/* Problem Table */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 shadow-xl overflow-hidden">
         
         {isWakingUp ? (

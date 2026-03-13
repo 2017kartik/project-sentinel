@@ -18,7 +18,7 @@ export default async function Home() {
             </div>
             <span className="font-bold text-lg tracking-tight">Project Sentinel</span>
           </div>
-          
+
           <div className="flex items-center gap-4">
             {userId ? (
               <>
@@ -46,17 +46,17 @@ export default async function Home() {
       {/* Hero Section */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-24 text-center relative overflow-hidden">
         {/* Background glow effects */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-600/20 rounded-full blur-[120px] pointer-events-none" />
-        
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-150 h-150 bg-blue-600/20 rounded-full blur-[120px] pointer-events-none" />
+
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-900/30 border border-blue-800/50 text-blue-400 text-sm font-medium mb-8">
           <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
           v1.0 Now Live
         </div>
 
-        <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 max-w-4xl bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent">
+        <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 max-w-4xl bg-linear-to-b from-white to-zinc-400 bg-clip-text text-transparent">
           Master Your FAANG Interview with AI.
         </h1>
-        
+
         <p className="text-lg md:text-xl text-zinc-400 max-w-2xl mb-10 leading-relaxed">
           Stop memorizing solutions. Practice live coding and system design with an adaptive AI interviewer that pushes you to write optimal, production-ready code.
         </p>
