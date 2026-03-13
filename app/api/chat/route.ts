@@ -1,9 +1,14 @@
 import { GoogleGenAI } from "@google/genai";
 import { neon } from "@neondatabase/serverless";
+import { auth } from "@clerk/nextjs/server"; // <-- NEW
 
 const ai = new GoogleGenAI({});
 
 export async function POST(req: Request) {
+  // --- NEW: Authenticate the user ---
+  const { userId } = await auth();
+  if (!userId) return new Response("Unauthorized", { status: 401 });
+
   const {
     userMessage,
     currentCode,
@@ -13,15 +18,16 @@ export async function POST(req: Request) {
     optimalTime,
     optimalSpace,
     difficultyLevel,
-    previousMessages // --- NEW: We receive the chat history! ---
+    previousMessages,
   } = await req.json();
 
   const sql = neon(process.env.DATABASE_URL!);
 
   const withRetry = async (dbCall: () => Promise<any>, retries = 3) => {
     for (let i = 0; i < retries; i++) {
-      try { return await dbCall(); } 
-      catch (err: any) {
+      try {
+        return await dbCall();
+      } catch (err: any) {
         if (i === retries - 1) throw err;
         await new Promise((res) => setTimeout(res, 1500));
       }
@@ -30,22 +36,23 @@ export async function POST(req: Request) {
 
   try {
     let personaName = "The Bar-Raiser";
-    let personaInstruction = "You are an elite, relentless Senior Software Engineer conducting a mock technical interview. Your persona is 'The Bar-Raiser'. You are highly critical and focus intensely on Big-O time and space complexity. Expect production-ready code. Do NOT give away the exact answer. Ask probing questions, point out missing edge cases, and challenge logic.";
+    let personaInstruction =
+      "You are an elite, relentless Senior Software Engineer conducting a mock technical interview. Your persona is 'The Bar-Raiser'. You are highly critical and focus intensely on Big-O time and space complexity. Expect production-ready code. Do NOT give away the exact answer. Ask probing questions, point out missing edge cases, and challenge logic.";
 
     if (difficultyLevel === 1) {
       personaName = "The Guide";
-      personaInstruction = "You are a friendly, encouraging Senior Engineer acting as 'The Guide'. Your goal is to help the candidate learn. Give gentle hints if they are stuck, praise good ideas, and collaboratively guide them toward the optimal time and space complexity. Do not just give them the answer, but lead them there with helpful clues.";
+      personaInstruction =
+        "You are a friendly, encouraging Senior Engineer acting as 'The Guide'. Your goal is to help the candidate learn. Give gentle hints if they are stuck, praise good ideas, and collaboratively guide them toward the optimal time and space complexity. Do not just give them the answer, but lead them there with helpful clues.";
     } else if (difficultyLevel === 2) {
       personaName = "The Standard Interviewer";
-      personaInstruction = "You are a professional, neutral Software Engineer conducting a standard technical interview. Evaluate their code objectively. Ask clarifying questions, point out bugs, and request time/space complexity analysis. Maintain a polite but formal tone. Let them struggle a bit, but offer a hint if they are completely stuck for too long.";
+      personaInstruction =
+        "You are a professional, neutral Software Engineer conducting a standard technical interview. Evaluate their code objectively. Ask clarifying questions, point out bugs, and request time/space complexity analysis. Maintain a polite but formal tone. Let them struggle a bit, but offer a hint if they are completely stuck for too long.";
     }
 
-    const dummyUserId = '11111111-1111-1111-1111-111111111111'; 
-    
     await withRetry(async () => {
       await sql`
         INSERT INTO sessions (id, user_id, problem_title, difficulty_mode, status) 
-        VALUES (${sessionId}, ${dummyUserId}, ${problemTitle}, ${personaName}, 'In Progress')
+        VALUES (${sessionId}, ${userId}, ${problemTitle}, ${personaName}, 'In Progress')
         ON CONFLICT (id) DO NOTHING
       `;
     });
@@ -57,15 +64,13 @@ export async function POST(req: Request) {
       `;
     });
 
-    // --- NEW: Format the chat history for Gemini ---
     const formattedHistory = (previousMessages || [])
-      .filter((msg: any) => msg.content.trim() !== '') // Remove empty loading states
+      .filter((msg: any) => msg.content.trim() !== "")
       .map((msg: any) => ({
-        role: msg.role === 'ai' ? 'model' : 'user',
-        parts: [{ text: msg.content }]
+        role: msg.role === "ai" ? "model" : "user",
+        parts: [{ text: msg.content }],
       }));
 
-    // --- NEW: Inject the current state as the final prompt ---
     const latestPrompt = `
 [CURRENT INTERVIEW STATE]
 Problem: "${problemTitle}"
@@ -86,10 +91,9 @@ Do NOT repeat questions you have already asked in the chat history.
 
     const responseStream = await ai.models.generateContentStream({
       model: "gemini-2.5-flash",
-      // --- NEW: Send History + Latest Message ---
       contents: [
         ...formattedHistory,
-        { role: "user", parts: [{ text: latestPrompt }] }
+        { role: "user", parts: [{ text: latestPrompt }] },
       ],
       config: {
         systemInstruction: `${personaInstruction}\n\nFORMATTING RULES:\n- Always use Markdown.\n- Use bullet points when listing multiple issues.\n- Add double line breaks between paragraphs for readability.\n- Use inline code formatting backticks for variable names.`,
@@ -123,8 +127,11 @@ Do NOT repeat questions you have already asked in the chat history.
     return new Response(stream);
   } catch (error: any) {
     console.error("Streaming Error RAW:", error);
-    if (error.message && error.message.includes('fetch failed')) {
-      return new Response("**[SYSTEM ERROR]** The database was asleep and took too long to wake up. I am awake now, please click 'Send' again to retry!", { status: 500 });
+    if (error.message && error.message.includes("fetch failed")) {
+      return new Response(
+        "**[SYSTEM ERROR]** The database was asleep and took too long to wake up. I am awake now, please click 'Send' again to retry!",
+        { status: 500 }
+      );
     }
     return new Response(`CRITICAL ERROR: ${error.message}`, { status: 500 });
   }

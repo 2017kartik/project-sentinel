@@ -11,6 +11,7 @@
     "bulk-seed": "tsx scripts/bulk_fetch.ts"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.0.4",
     "@google/genai": "^1.44.0",
     "@google/generative-ai": "^0.24.1",
     "@monaco-editor/react": "^4.7.0",

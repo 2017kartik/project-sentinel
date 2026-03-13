@@ -1,16 +1,19 @@
 import { neon } from '@neondatabase/serverless';
 import Link from 'next/link';
+import { auth } from '@clerk/nextjs/server'; // <-- NEW: Clerk Auth
+import { UserButton } from '@clerk/nextjs';  // <-- NEW: Clerk UI
 
 export const dynamic = 'force-dynamic'; 
 
 export default async function DashboardPage() {
+  const { userId } = await auth(); // <-- Fetch logged-in user ID
   let problems: any[] = [];
   let isWakingUp = false;
 
   try {
     const sql = neon(process.env.DATABASE_URL!);
     
-    // --- FIX: We removed the CREATE TABLE command! It only runs a pure, fast SELECT now. ---
+    // --- FIX: Query now joins user_progress ONLY for the logged-in user! ---
     problems = await sql`
       SELECT 
         p.slug, 
@@ -19,7 +22,7 @@ export default async function DashboardPage() {
         p.optimal_space, 
         COALESCE(up.status, 'Unsolved') as status
       FROM problems p
-      LEFT JOIN user_progress up ON p.slug = up.slug
+      LEFT JOIN user_progress up ON p.slug = up.slug AND up.user_id = ${userId}
       ORDER BY p.title ASC
     `;
   } catch (error) {
@@ -29,9 +32,16 @@ export default async function DashboardPage() {
 
   return (
     <main>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-zinc-50">Problem Set</h1>
-        <p className="mt-2 text-zinc-400">Select a FAANG interview question to start your mock session.</p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-zinc-50">Problem Set</h1>
+          <p className="mt-2 text-zinc-400">Select a FAANG interview question to start your mock session.</p>
+        </div>
+        
+        {/* --- NEW: Render Clerk User Profile Button --- */}
+        <div className="bg-zinc-800 p-2 rounded-full border border-zinc-700 flex items-center justify-center">
+           <UserButton />
+        </div>
       </div>
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 shadow-xl overflow-hidden">
