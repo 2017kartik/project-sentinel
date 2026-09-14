@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Lock } from 'lucide-react';
 import Editor from '@monaco-editor/react';
 import {
   ResizableHandle,
@@ -21,6 +21,9 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [sessionId] = useState(() => crypto.randomUUID());
+  
+  const [language, setLanguage] = useState('cpp');
+  const [isCodeUnlocked, setIsCodeUnlocked] = useState(false);
   
   const [difficultyLevel, setDifficultyLevel] = useState(3);
   const [personaName, setPersonaName] = useState('The Bar-Raiser');
@@ -60,6 +63,24 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
     };
     fetchProblem();
   }, [id]);
+
+  const getDefaultBoilerplate = (lang: string) => {
+    switch (lang) {
+      case 'cpp': return problem?.boilerplate_cpp || '// Write your C++ code here...';
+      case 'java': return '// Write your Java code here...';
+      case 'sql': return '-- Write your SQL query here...';
+      case 'python': return '# Write your Python code here...';
+      case 'javascript': return '// Write your JavaScript code here...';
+      case 'typescript': return '// Write your TypeScript code here...';
+      default: return '// Write your code here...';
+    }
+  };
+
+  const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newLang = e.target.value;
+    setLanguage(newLang);
+    setCode(getDefaultBoilerplate(newLang));
+  };
 
   const INTERVIEW_DURATION = 45 * 60;
   const [timeLeft, setTimeLeft] = useState(INTERVIEW_DURATION);
@@ -104,7 +125,7 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
         body: JSON.stringify({
           userMessage: input,
           currentCode: code,
-          language: 'cpp',
+          language: language,
           sessionId: sessionId,
           problemTitle: problem?.title,
           optimalTime: problem?.optimal_time,
@@ -126,9 +147,13 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
         const chunkText = decoder.decode(value, { stream: true });
         aiResponse += chunkText;
 
+        if (aiResponse.includes('[EDITOR_UNLOCKED]')) {
+          setIsCodeUnlocked(true);
+        }
+
         setMessages((prev) => {
           const updated = [...prev];
-          updated[updated.length - 1].content = aiResponse;
+          updated[updated.length - 1].content = aiResponse.replace(/\[EDITOR_UNLOCKED\]/g, '');
           return updated;
         });
       }
@@ -161,7 +186,7 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
         body: JSON.stringify({
           userMessage: submitPrompt,
           currentCode: code,
-          language: 'cpp',
+          language: language,
           sessionId: sessionId,
           problemTitle: problem?.title,
           optimalTime: problem?.optimal_time,
@@ -238,6 +263,20 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
         </h2>
 
         <div className="flex items-center gap-6">
+          <select 
+            value={language}
+            onChange={handleLanguageChange}
+            disabled={isLocked || isLoading}
+            className="bg-zinc-800 text-zinc-300 border border-zinc-700 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="cpp">C++</option>
+            <option value="java">Java</option>
+            <option value="python">Python</option>
+            <option value="javascript">JavaScript</option>
+            <option value="typescript">TypeScript</option>
+            <option value="sql">SQL</option>
+          </select>
+
           <div className={`font-mono text-lg font-bold ${timeLeft < 300 ? 'text-red-500 animate-pulse' : 'text-zinc-300'}`}>
             {formatTime(timeLeft)}
           </div>
@@ -350,10 +389,21 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
         <ResizableHandle withHandle className="bg-zinc-800" />
 
         <ResizablePanel defaultSize={60}>
-          <div className="h-full border-l border-zinc-800">
+          <div className="h-full border-l border-zinc-800 relative">
+            {!isCodeUnlocked && !isLocked && (
+              <div className="absolute inset-0 z-10 backdrop-blur-sm bg-zinc-950/50 flex flex-col items-center justify-center border-l border-zinc-800">
+                <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-xl flex flex-col items-center max-w-sm text-center shadow-2xl">
+                  <Lock className="w-8 h-8 text-zinc-500 mb-4" />
+                  <h3 className="text-zinc-200 font-semibold mb-2">Editor Locked</h3>
+                  <p className="text-zinc-400 text-sm">
+                    Explain your optimal approach in the chat to unlock the editor.
+                  </p>
+                </div>
+              </div>
+            )}
             <Editor
               height="100%"
-              defaultLanguage="cpp"
+              language={language}
               value={code}
               onChange={(val) => setCode(val || '')}
               theme="vs-dark"
@@ -363,7 +413,7 @@ export default function InterviewPage({ params }: { params: Promise<{ id: string
                 fontFamily: 'var(--font-jetbrains-mono)',
                 scrollBeyondLastLine: false,
                 padding: { top: 20 },
-                readOnly: isLocked
+                readOnly: !isCodeUnlocked || isLocked
               }}
             />
           </div>

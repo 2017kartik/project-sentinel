@@ -1,30 +1,21 @@
-import { neon } from '@neondatabase/serverless';
 import Link from 'next/link';
 import { auth } from '@clerk/nextjs/server';
 import { UserButton } from '@clerk/nextjs';
-import DifficultySelector from '@/components/ui/DifficultySelector'; // <-- NEW: Import the slider
+import DifficultySelector from '@/components/ui/DifficultySelector';
+import { ProblemRepository } from '@/lib/repositories/problemRepository';
+import { Problem } from '@/types';
 
 export const dynamic = 'force-dynamic'; 
 
 export default async function DashboardPage() {
   const { userId } = await auth(); 
-  let problems: any[] = [];
+  let problems: Problem[] = [];
   let isWakingUp = false;
-
+  
   try {
-    const sql = neon(process.env.DATABASE_URL!);
-    
-    problems = await sql`
-      SELECT 
-        p.slug, 
-        p.title, 
-        p.optimal_time, 
-        p.optimal_space, 
-        COALESCE(up.status, 'Unsolved') as status
-      FROM problems p
-      LEFT JOIN user_progress up ON p.slug = up.slug AND up.user_id = ${userId}
-      ORDER BY p.title ASC
-    `;
+    if (userId) {
+      problems = await ProblemRepository.getProblemsWithUserProgress(userId);
+    }
   } catch (error) {
     console.error("Database Error:", error);
     isWakingUp = true;
